@@ -82,5 +82,5 @@ with gr.Blocks() as demo:
             partial(process_video), [teacher_video, student_video], out_video)
 
 gr.close_all()
-# demo.queue()
-demo.launch(share=True)
+demo.queue()
+demo.launch()
