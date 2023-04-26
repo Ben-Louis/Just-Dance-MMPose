@@ -193,7 +193,8 @@ class VideoProcessor:
                 np.zeros((300, 256, 3)), stu_inst)
             tch_out_img = self.visualizer._draw_instances_kpts(
                 np.zeros((300, 256, 3)), tch_inst)
-            out_img = blend_images(stu_out_img, tch_out_img, ratio=(1, 0.3))
+            out_img = blend_images(
+                stu_out_img, tch_out_img, blend_ratios=(1, 0.3))
 
             # draw score
             score_frame = piece_info['similarity'][i]
