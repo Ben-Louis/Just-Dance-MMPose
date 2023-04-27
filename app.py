@@ -48,8 +48,10 @@ with gr.Blocks() as demo:
             with gr.Column():
                 gr.Markdown('Student Video')
                 student_video = gr.Video(type='mp4')
-                gr.Examples(['projects/just_dance/resources/tom.mp4'],
-                            student_video)
+                gr.Examples([
+                    'projects/just_dance/resources/tom.mp4',
+                    'projects/just_dance/resources/tsinghua_30fps.mp4'
+                ], student_video)
             with gr.Column():
                 gr.Markdown('Teacher Video')
                 teacher_video = gr.Video(type='mp4')
