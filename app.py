@@ -27,12 +27,17 @@ def process_video(
     print(student_video)
 
     video_processor = VideoProcessor()
-    if student_video is None:
+    if student_video is None and teacher_video is not None:
         # Pre-process the teacher video when users record the student video
         # using a webcam. This allows users to view the teacher video and
         # follow the dance moves while recording the student video.
         _ = video_processor.get_keypoints_from_video(teacher_video)
         return teacher_video
+    elif teacher_video is None and student_video is not None:
+        _ = video_processor.get_keypoints_from_video(student_video)
+        return student_video
+    elif teacher_video is None and student_video is None:
+        return None
 
     return video_processor.run(teacher_video, student_video)
 

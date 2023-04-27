@@ -14,7 +14,8 @@ from mmpose.datasets.datasets.utils import parse_pose_metainfo
 from mmpose.visualization import PoseLocalVisualizer
 from .calculate_similarity import (calculate_similarity,
                                    select_piece_from_similarity)
-from .utils import blend_images, resize_image_to_fixed_height
+from .utils import (blend_images, convert_video_fps, get_smoothed_kpt,
+                    resize_image_to_fixed_height)
 
 pose_config = os.path.join(
     os.path.dirname(os.path.abspath(__file__)).rsplit(os.sep, 1)[0],
@@ -106,10 +107,15 @@ class VideoProcessor:
             keypoints = torch.load(f'{video_fname}_kpts.pth')
             return keypoints
 
-        video = mmcv.VideoReader(video)
-        assert video.fps == 30, 'only support videos with 30 FPS now'
+        video_reader = mmcv.VideoReader(video)
+
+        if video_reader.fps != 30:
+            video_reader = mmcv.VideoReader(convert_video_fps(video))
+
+        assert video_reader.fps == 30, f'only support videos with 30 FPS, ' \
+            f'but the video {video_fname} has {video_reader.fps} fps'
         keypoints_list = []
-        for i, frame in enumerate(video):
+        for i, frame in enumerate(video_reader):
             keypoints = self.get_keypoints_from_frame(frame)
             keypoints_list.append(keypoints)
         keypoints = np.concatenate(keypoints_list)
@@ -129,8 +135,8 @@ class VideoProcessor:
         piece_info = select_piece_from_similarity(similirity)
 
         # output
-        tch_name = os.path.basename(tch_video).rsplit('.', 0)
-        stu_name = os.path.basename(stu_video).rsplit('.', 0)
+        tch_name = os.path.basename(tch_video).rsplit('.', 1)[0]
+        stu_name = os.path.basename(stu_video).rsplit('.', 1)[0]
         fname = f'{tch_name}-{stu_name}.mp4'
         output_file = os.path.join(tempfile.mkdtemp(), fname)
         return self.generate_output_video(tch_video, stu_video, output_file,
@@ -148,8 +154,6 @@ class VideoProcessor:
         for _ in range(piece_info['stu_start']):
             _ = next(stu_video_reader)
 
-        rescale_ratio = 1
-        shift = np.zeros(2, dtype=np.float32)
         score, last_vis_score = 0, 0
         video_writer = None
         for i in track_iter_progress(range(piece_info['length'])):
@@ -158,25 +162,10 @@ class VideoProcessor:
             tch_frame = resize_image_to_fixed_height(tch_frame, 300)
             stu_frame = resize_image_to_fixed_height(stu_frame, 300)
 
-            # rescale
-            stu_kpt = stu_kpts[piece_info['stu_start'] + i]
-            tch_kpt = tch_kpts[piece_info['tch_start'] + i]
-            mask = np.logical_and(stu_kpt[..., 2] > 0.3, tch_kpt[..., 2] > 0.3)
-            if mask.sum() > 0:
-                std_kpt_valid = stu_kpt[mask]
-                tch_kpt_valid = tch_kpt[mask]
-                std_min = std_kpt_valid.min(axis=0)[..., :2]
-                std_max = std_kpt_valid.max(axis=0)[..., :2]
-                tch_min = tch_kpt_valid.min(axis=0)[..., :2]
-                tch_max = tch_kpt_valid.max(axis=0)[..., :2]
-                rescale_ratio_ = (tch_max - tch_min) / (
-                    std_max - std_min + 1e-6)
-                rescale_ratio_ = (rescale_ratio_[0] * rescale_ratio_[1])**0.5
-                rescale_ratio = rescale_ratio**0.9 * rescale_ratio_**0.1
-                shift_ = tch_min - rescale_ratio * std_min
-                shift = shift * 0.9 + shift_ * 0.1
-            stu_kpt[
-                ..., :2] = stu_kpt[..., :2] * rescale_ratio[None] + shift[None]
+            stu_kpt = get_smoothed_kpt(stu_kpts, piece_info['stu_start'] + i,
+                                       5)
+            tch_kpt = get_smoothed_kpt(tch_kpts, piece_info['tch_start'] + i,
+                                       5)
 
             # draw pose
             stu_kpt[..., 1] += (300 - 256)
@@ -209,7 +198,7 @@ class VideoProcessor:
                 vertical_alignments='bottom')
             self.visualizer.draw_texts(
                 f'{int(last_vis_score)}', (115, 30),
-                font_sizes=20 * max(0.6, score_frame),
+                font_sizes=30 * max(0.4, score_frame),
                 colors=(255, 255, 255),
                 vertical_alignments='bottom')
             out_img = self.visualizer.get_image()

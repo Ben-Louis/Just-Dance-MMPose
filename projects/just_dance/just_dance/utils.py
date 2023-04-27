@@ -1,5 +1,5 @@
 # Copyright (c) OpenMMLab. All rights reserved.
-
+import os
 from typing import Tuple
 
 import cv2
@@ -55,3 +55,52 @@ def blend_images(img1: np.ndarray,
     blended_image = (blended_image * 255).astype(np.uint8)
 
     return blended_image
+
+
+def convert_video_fps(video):
+
+    input_video = video
+    video_name, post_fix = input_video.rsplit('.', 1)
+    output_video = f'{video_name}_30fps.{post_fix}'
+    if os.path.exists(output_video):
+        return output_video
+
+    os.system(
+        f"ffmpeg -i {input_video} -vf \"minterpolate='fps=30'\" {output_video}"
+    )
+
+    return output_video
+
+
+def get_smoothed_kpt(kpts, index, sigma=5):
+    """Smooths keypoints using a Gaussian filter."""
+    assert kpts.shape[1] == 17
+    assert kpts.shape[2] == 3
+    assert sigma % 2 == 1
+
+    num_kpts = len(kpts)
+
+    start_idx = max(0, index - sigma // 2)
+    end_idx = min(num_kpts, index + sigma // 2 + 1)
+
+    # Extract a piece of the keypoints array to apply the filter
+    piece = kpts[start_idx:end_idx].copy()
+    original_kpt = kpts[index]
+
+    # Split the piece into coordinates and scores
+    coords, scores = piece[..., :2], piece[..., 2]
+
+    # Calculate the Gaussian ratio for each keypoint
+    gaussian_ratio = np.arange(len(scores)) + start_idx - index
+    gaussian_ratio = np.exp(-gaussian_ratio**2 / 2)
+
+    # Update scores using the Gaussian ratio
+    scores *= gaussian_ratio[:, None]
+
+    # Compute the smoothed coordinates
+    smoothed_coords = (coords * scores[..., None]).sum(axis=0) / (
+        scores[..., None].sum(axis=0) + 1e-4)
+
+    original_kpt[..., :2] = smoothed_coords
+
+    return original_kpt

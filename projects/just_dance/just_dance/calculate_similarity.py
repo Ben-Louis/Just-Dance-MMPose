@@ -24,19 +24,19 @@ def _calculate_similarity(tch_kpts: np.ndarray, stu_kpts: np.ndarray):
     matrix[~mask] = 0.0
 
     matrix_ = matrix.clone()
-    matrix_[matrix == 0] = float('inf')
+    matrix_[matrix == 0] = 256
     x_min = matrix_.narrow(3, 0, 1).min(dim=2).values
     y_min = matrix_.narrow(3, 1, 1).min(dim=2).values
     matrix_ = matrix.clone()
-    matrix_[matrix == 0] = -float('inf')
+    # matrix_[matrix == 0] = 0
     x_max = matrix_.narrow(3, 0, 1).max(dim=2).values
     y_max = matrix_.narrow(3, 1, 1).max(dim=2).values
 
     matrix_ = matrix.clone()
     matrix_[:, :, :, 0] = (matrix_[:, :, :, 0] - x_min) / (
-        x_max - x_min + 1e-6)
-    matrix_[:, :, :, 1] = (matrix_[:, :, :, 0] - y_min) / (
-        y_max - y_min + 1e-6)
+        x_max - x_min + 1e-4)
+    matrix_[:, :, :, 1] = (matrix_[:, :, :, 1] - y_min) / (
+        y_max - y_min + 1e-4)
     matrix_[:, :, :, 2] = (matrix_[:, :, :, 2] > 0.3).float()
     xy_dist = matrix_[..., :2, 0] - matrix_[..., :2, 1]
     score = matrix_[..., 2, 0] * matrix_[..., 2, 1]
@@ -47,6 +47,8 @@ def _calculate_similarity(tch_kpts: np.ndarray, stu_kpts: np.ndarray):
     num_visible_kpts = score.sum(dim=-1)
     similarity = similarity * torch.log(
         (1 + (num_visible_kpts - 1) * 10).clamp(min=1)) / np.log(161)
+
+    similarity[similarity.isnan()] = 0
 
     return similarity
 
